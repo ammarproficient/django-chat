@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <title>Realtime Chat UI — Connections</title>
+    <style>
+        :root {
+            --bg: #f2f2f2;
+            --card: #fff;
+            --accent: #4a76a8;
+            --sent: #dcf8c6;
+            --recv: #f1f0f0
+        }
+
+        body {
+            font-family: Inter, Arial, Helvetica, sans-serif;
+            background: var(--bg);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .wrap {
+            width: 760px;
+            max-width: 98%;
+            height: 85vh;
+            display: grid;
+            grid-template-columns:320px 1fr;
+            gap: 18px;
+            padding: 18px
+        }
+
+        .panel {
+            background: var(--card);
+            border-radius: 10px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        /* left - controls */
+        .left .controls label {
+            font-size: 13px;
+            color: #333
+        }
+
+        .left input[type=text], .left button, .left select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ddd
+        }
+
+        .left .row {
+            display: flex;
+            gap: 8px
+        }
+
+        .left .row > * {
+            flex: 1
+        }
+
+        .status {
+            font-size: 13px;
+            color: green
+        }
+
+        /* chat area */
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0
+        }
+
+        .chat-body {
+            flex: 1;
+            overflow: auto;
+            padding: 10px;
+            border-radius: 8px;
+            background: linear-gradient(180deg, #fff, #fbfbfb)
+        }
+
+        .message-wrapper {
+            display: flex;
+            align-items: flex-end;
+            margin: 8px 0;
+            gap: 8px;
+            position: relative
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.3;
+            word-wrap: break-word
+        }
+
+        .message.sent {
+            background: var(--sent);
+            margin-left: auto
+        }
+
+        .message.received {
+            background: var(--recv);
+            margin-right: auto
+        }
+
+        .meta {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+            display: flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .menu {
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px
+        }
+
+        .menu:hover {
+            background: #eee
+        }
+
+        .dropdown {
+            position: absolute;
+            display: none;
+            right: 0;
+            top: 22px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08)
+        }
+
+        .dropdown button {
+            display: block;
+            padding: 8px 12px;
+            border: none;
+            background: none;
+            width: 140px;
+            text-align: left;
+            cursor: pointer
+        }
+
+        .dropdown button:hover {
+            background: #f6f6f6
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 8px;
+            padding-top: 10px;
+            border-top: 1px solid #eee
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ddd
+        }
+
+        .chat-input button {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer
+        }
+
+        .ticks {
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            color: #666;
+            font-size: 12px
+        }
+
+        .tick {
+            width: 16px;
+            height: 12px;
+            display: inline-block;
+            opacity: .8
+        }
+
+        .tick.single::after {
+            content: "✔";
+            color: #666
+        }
+
+        .tick.double::after {
+            content: "✔✔";
+            color: #666
+        }
+
+        .tick.blue::after {
+            content: "✔✔";
+            color: #0b93f6
+        }
+
+        /* search modal */
+        .modal {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 14px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            display: none;
+            z-index: 1000;
+            width: 640px;
+            max-width: 95%
+        }
+
+        .modal h3 {
+            margin: 0 0 8px 0
+        }
+
+        .modal .result {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0
+        }
+
+        .close-btn {
+            background: #eee;
+            border: none;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer
+        }
+
+        /* small helpers */
+        .muted {
+            color: #888;
+            font-size: 13px
+        }
+
+        .room-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 250px;
+            overflow: auto
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <!-- LEFT: controls -->
+    <div class="panel left">
+        <div>
+            <label>Channel / Room name</label>
+            <div class="row">
+                <input id="roomInput" type="text" placeholder="e.g. general" value="general">
+                <button id="connectBtn">Connect</button>
+            </div>
+            <div style="margin-top:8px" class="row">
+                <button id="disconnectBtn">Disconnect</button>
+                <button id="clearBtn">Clear</button>
+            </div>
+            <div style="margin-top:8px" class="muted">Connection: <span id="connStatus">disconnected</span></div>
+        </div>
+
+        <hr>
+
+        <div>
+            <label>Search messages (in channel)</label>
+            <div style="display:flex;gap:8px">
+                <input id="searchInput" type="text" placeholder="search text...">
+                <button id="searchBtn">Search</button>
+            </div>
+            <div class="muted" style="margin-top:8px">Search returns last 20 matches from server.</div>
+        </div>
+
+        <hr>
+
+        <div>
+            <label>Rooms (quick connect)</label>
+            <div class="room-list" id="roomList">
+                <button class="muted" onclick="fillRoom('general')">general</button>
+                <button class="muted" onclick="fillRoom('random')">random</button>
+                <button class="muted" onclick="fillRoom('support')">support</button>
+            </div>
+        </div>
+
+        <hr>
+
+    </div>
+
+    <!-- RIGHT: chat -->
+    <div class="panel right">
+        <div class="chat-header">
+            <div><strong>Chat Room:</strong> <span id="currentRoom">general</span></div>
+            <div class="muted">You: <span id="username">me</span></div>
+        </div>
+
+        <div class="chat-body" id="chatBody">
+            <!-- messages append here -->
+        </div>
+
+        <div class="chat-input">
+            <input id="messageInput" placeholder="Type a message and press Enter..."/>
+            <button id="sendBtn">Send</button>
+        </div>
+    </div>
+</div>
+
+<!-- search modal -->
+<div class="modal" id="searchModal">
+    <h3>Search results for "<span id="searchQuery"></span>"</h3>
+    <div id="searchResults" style="max-height:300px;overflow:auto;margin-top:8px"></div>
+    <div style="text-align:right;margin-top:8px">
+        <button class="close-btn" id="closeSearch">Close</button>
+    </div>
+</div>
+
+<script>
+    /*
+      Frontend logic:
+      - Connect/disconnect WebSocket to /ws/chat/<room>/
+      - send messages, receive saved/delivered/read/update events
+      - editable messages, delete requests
+      - search request via websocket
+    */
+
+    let socket = null;
+    let room = document.getElementById('roomInput').value || 'general';
+    let chatBody = document.getElementById('chatBody');
+    let pendingTemps = []; // array of temp ids (to match saved)
+    let tempMap = {};      // tempId -> element
+    let idMap = {};        // server message_id -> element
+    let tempCounter = 0;
+    const username = 'me'; // frontend label; backend will decide actual username
+
+    document.getElementById('currentRoom').textContent = room;
+    document.getElementById('connStatus').textContent = 'disconnected';
+
+    function fillRoom(r){ document.getElementById('roomInput').value = r; room = r; document.getElementById('currentRoom').textContent = r; }
+
+    // connect
+    document.getElementById('connectBtn').addEventListener('click', () => {
+      room = document.getElementById('roomInput').value.trim() || 'general';
+      connectSocket(room);
+    });
+
+    document.getElementById('disconnectBtn').addEventListener('click', () => {
+      disconnectSocket();
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      chatBody.innerHTML = '';
+      pendingTemps = []; tempMap = {}; idMap = {}; tempCounter = 0;
+    });
+
+    // send + enter
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    document.getElementById('messageInput').addEventListener('keypress', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); sendMessage(); }
+    });
+
+    // search
+    document.getElementById('searchBtn').addEventListener('click', ()=>{
+      const q = document.getElementById('searchInput').value.trim();
+      if(!socket || socket.readyState !== WebSocket.OPEN){ alert('Connect first'); return; }
+      if(!q) return alert('type search query');
+      socket.send(JSON.stringify({ search: q }));
+      document.getElementById('searchQuery').textContent = q;
+    });
+    document.getElementById('closeSearch').addEventListener('click', ()=>{ document.getElementById('searchModal').style.display='none'; });
+
+    // core connect/disconnect
+function connectSocket(roomName){
+  if(socket && socket.readyState === WebSocket.OPEN){
+    alert('Already connected');
+    return;
+  }
+
+  // ab direct connect karega localhost:8000 pe
+  const url = `ws://127.0.0.1:8000/ws/chat/${roomName}/`;
+  socket = new WebSocket(url);
+
+  socket.onopen = () => {
+    document.getElementById('connStatus').textContent = 'connected';
+    document.getElementById('currentRoom').textContent = roomName;
+    console.log('WS open', url);
+  };
+
+  socket.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    handleServerEvent(data);
+  };
+
+  socket.onclose = () => {
+    document.getElementById('connStatus').textContent = 'disconnected';
+    console.log('WS closed');
+  };
+
+  socket.onerror = (err) => {
+    console.error('WS error', err);
+  };
+}
+
+
+    function disconnectSocket(){
+      if(!socket) return;
+      socket.close();
+      socket = null;
+      document.getElementById('connStatus').textContent = 'disconnected';
+    }
+
+    // send message flow: create temp element, send to server, wait saved/delivered/read updates
+    function sendMessage(){
+      if(!socket || socket.readyState !== WebSocket.OPEN){ alert('Connect first'); return; }
+      const input = document.getElementById('messageInput');
+      const text = input.value.trim();
+      if(!text) return;
+      const tempId = 't' + (++tempCounter);
+      const el = createMessageElement({ tempId, content:text, username: username, direction:'sent' });
+      chatBody.appendChild(el.wrapper);
+      chatBody.scrollTop = chatBody.scrollHeight;
+      tempMap[tempId] = el;
+      pendingTemps.push(tempId);
+
+      // send to server
+      socket.send(JSON.stringify({ message: text }));
+
+      input.value = '';
+    }
+
+    // create DOM for message and return object refs
+    function createMessageElement({ id=null, tempId=null, content='', username='user', direction='received', delivered=false, read=false }){
+      const wrapper = document.createElement('div');
+      wrapper.className = 'message-wrapper';
+      wrapper.dataset.messageId = id || '';
+      if(tempId) wrapper.dataset.tempId = tempId;
+
+      const msg = document.createElement('div');
+      msg.className = 'message ' + (direction==='sent' ? 'sent' : 'received');
+      msg.textContent = content;
+      msg.contentEditable = false;
+      msg.style.whiteSpace = 'pre-wrap';
+
+      // meta area (username + ticks)
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const userSpan = document.createElement('span'); userSpan.textContent = username;
+      const ticks = document.createElement('span'); ticks.className = 'ticks';
+      const tickEl = document.createElement('span'); tickEl.className = 'tick single'; // start none
+      ticks.appendChild(tickEl);
+
+      meta.appendChild(userSpan);
+      meta.appendChild(ticks);
+
+      // menu
+      const menu = document.createElement('div'); menu.className='menu'; menu.textContent='⋮';
+      const dropdown = document.createElement('div'); dropdown.className='dropdown';
+      dropdown.innerHTML = `<button class="edit-btn">Edit</button><button class="delete-btn">Delete</button>`;
+      menu.appendChild(dropdown);
+
+      wrapper.appendChild(msg);
+      wrapper.appendChild(menu);
+      wrapper.appendChild(meta);
+
+      // attach menu handlers
+      attachMenuHandlers(menu, msg, wrapper);
+
+      // store references
+      const obj = { wrapper, msg, meta, ticksElem: tickEl };
+
+      // initial tick state
+      if(read) setTick(obj, 'read'); else if(delivered) setTick(obj, 'double'); else setTick(obj, 'single');
+
+      // clicking received msg -> send read receipt automatically (simulate view)
+      if(direction === 'received'){
+        // when appended, auto send read receipt for that message if has id
+        setTimeout(()=>{ // small delay to simulate render
+          const mid = wrapper.dataset.messageId;
+          if(mid && socket && socket.readyState === WebSocket.OPEN){
+            socket.send(JSON.stringify({ read_message_id: parseInt(mid) }));
+          }
+        }, 80);
+      }
+
+      return obj;
+    }
+
+    // tick setter
+    function setTick(obj, type){
+      // type: 'single'|'double'|'read'
+      obj.ticksElem.className = 'tick ' + (type==='read' ? 'blue' : (type==='double' ? 'double' : 'single'));
+    }
+
+    // attach menu handlers (edit/delete)
+    function attachMenuHandlers(menu, msgEl, wrapper){
+      const dropdown = menu.querySelector('.dropdown');
+      menu.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+      });
+
+      // edit
+      dropdown.querySelector('.edit-btn').addEventListener('click', async (e)=>{
+        e.stopPropagation(); dropdown.style.display='none';
+        msgEl.contentEditable = 'true';
+        msgEl.focus();
+
+        const finishEdit = async () => {
+          msgEl.contentEditable = 'false';
+          const newText = msgEl.textContent.trim();
+          const mid = wrapper.dataset.messageId;
+          if(!mid){
+            alert('Cannot edit until message saved by server.');
+            return;
+          }
+          // send edit request
+          socket.send(JSON.stringify({
+            edit_message_id: parseInt(mid),
+            new_content: newText
+          }));
+        };
+
+        // save on Enter or blur
+        const onKey = (ev)=>{
+          if(ev.key === 'Enter'){ ev.preventDefault(); finishEdit(); msgEl.removeEventListener('keypress', onKey); }
+        };
+        msgEl.addEventListener('keypress', onKey);
+        msgEl.addEventListener('blur', finishEdit, { once:true });
+      });
+
+      // delete
+      dropdown.querySelector('.delete-btn').addEventListener('click', (e)=>{
+        e.stopPropagation(); dropdown.style.display='none';
+        const mid = wrapper.dataset.messageId;
+        if(!mid){
+          // if temp message not saved yet, just remove
+          if(wrapper.dataset.tempId){
+            wrapper.remove();
+          }
+          return;
+        }
+        const ok = confirm('Delete this message?');
+        if(!ok) return;
+        socket.send(JSON.stringify({ delete_message_id: parseInt(mid) }));
+      });
+    }
+
+    // handle incoming server events
+    function handleServerEvent(data){
+      // saved (single tick) coming back to sender
+      if(data.status === 'saved'){
+        // find first pending temp that matches content or assign by order
+        // try to match by content first
+        let assigned = false;
+        for(let t of pendingTemps){
+          const el = tempMap[t];
+          if(!el) continue;
+          if(el.msg.textContent === data.message){
+            // assign server id
+            el.wrapper.dataset.messageId = data.message_id;
+            idMap[data.message_id] = el;
+            // update tick -> single
+            setTick(el, 'single');
+            // remove from pending
+            pendingTemps = pendingTemps.filter(x=>x!==t);
+            delete tempMap[t];
+            assigned = true;
+            break;
+          }
+        }
+        if(!assigned){
+          // fallback: create a message element for saved (maybe sender didn't create local)
+          const el = createMessageElement({ id:data.message_id, content:data.message, username:data.username, direction: data.username === username ? 'sent' : 'received' });
+          el.wrapper.dataset.messageId = data.message_id;
+          chatBody.appendChild(el.wrapper);
+          chatBody.scrollTop = chatBody.scrollHeight;
+          idMap[data.message_id] = el;
+        }
+      }
+
+      // delivered (double tick)
+      else if(data.status === 'delivered'){
+        const mid = data.message_id;
+        const el = idMap[mid];
+        if(el){
+          setTick(el, 'double');
+        } else {
+          // maybe it's an incoming message for others — create received element
+          const newEl = createMessageElement({ id:mid, content:data.message, username:data.username, direction:'received' });
+          newEl.wrapper.dataset.messageId = mid;
+          chatBody.appendChild(newEl.wrapper);
+          chatBody.scrollTop = chatBody.scrollHeight;
+          idMap[mid] = newEl;
+          // automatically send read receipt (simulate viewing)
+          setTimeout(()=>{ if(socket && socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify({ read_message_id: mid })); }, 150);
+        }
+      }
+
+      // read (blue tick)
+      else if(data.status === 'read'){
+        const mid = data.message_id;
+        const el = idMap[mid];
+        if(el){ setTick(el, 'read'); }
+      }
+
+      // edited (if server sends such status)
+      else if(data.status === 'edited' || data.status === 'message_edited'){
+        const mid = data.message_id || data.id;
+        const el = idMap[mid];
+        if(el){
+          el.msg.textContent = data.new_content || data.newContent || data.new_content;
+          // show "(edited)" meta
+          let meta = el.wrapper.querySelector('.meta');
+          if(meta && !meta.querySelector('.edited-tag')){
+            const ed = document.createElement('span'); ed.className='edited-tag muted'; ed.style.marginLeft='8px'; ed.textContent='(edited)';
+            meta.appendChild(ed);
+          }
+        }
+      }
+
+      // deleted
+      else if(data.status === 'deleted' || data.status === 'message_deleted'){
+        const mid = data.message_id;
+        const el = idMap[mid];
+        if(el){
+          el.msg.textContent = '[deleted]';
+          el.msg.style.fontStyle = 'italic';
+          // optional: grey out
+          el.msg.style.opacity = '0.7';
+        }
+      }
+
+      // search results
+      else if(data.status === 'search_results'){
+        const results = data.results || [];
+        const box = document.getElementById('searchResults');
+        box.innerHTML = '';
+        results.forEach(r=>{
+          const d = document.createElement('div'); d.className='result';
+          d.innerHTML = `<strong>${r.username}</strong> <span class="muted">(${r.timestamp})</span><div>${r.content}</div>`;
+          box.appendChild(d);
+        });
+        document.getElementById('searchModal').style.display = 'block';
+      }
+
+      // fallback: unknown payload — show raw
+      else {
+        console.log('unknown ws data', data);
+      }
+    }
+
+    // global click to close any open dropdown
+    document.addEventListener('click', ()=>{ document.querySelectorAll('.dropdown').forEach(d=>d.style.display='none'); });
+
+    /* helper: when page loads, optionally auto-connect for convenience */
+    window.addEventListener('load', ()=>{
+      // auto-connect to default room for testing
+      // connectSocket(room);
+    });
+</script>
+</body>
+</html>
